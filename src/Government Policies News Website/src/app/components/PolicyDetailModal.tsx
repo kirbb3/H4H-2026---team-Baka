@@ -256,26 +256,14 @@ export function PolicyDetailModal({
 
           {/* ── Action buttons ──────────────────────────────────────────────── */}
           <div className="flex gap-3">
-            {/* "Find Out More" — primary CTA, links to the agenda page (source_url)
-                or falls back to apply_url if that's all we have. */}
-            {(policy.source_url || policy.apply_url) && (
+            {/* "Find Out More" — links to the official Legistar agenda page (source_url),
+                which is always a real government document.  Hidden if no URL is stored. */}
+            {policy.source_url && (
               <Button
                 className="flex-1 bg-blue-600 hover:bg-blue-700"
-                onClick={() => window.open((policy.source_url ?? policy.apply_url)!, "_blank")}
+                onClick={() => window.open(policy.source_url!, "_blank")}
               >
                 Find Out More
-              </Button>
-            )}
-
-            {/* "Apply Now" — secondary CTA, only shown when the scraper found a
-                dedicated application URL in the memorandum ANALYSIS section. */}
-            {policy.apply_url && (
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => window.open(policy.apply_url!, "_blank")}
-              >
-                Apply Now
               </Button>
             )}
 
