@@ -11,6 +11,9 @@ interface Policy {
   status: string;
   priority: string;
   tags: string[];
+  targeted_labels?: string[];
+  funding_amount?: string | null;
+  funding_pct_diff?: string | null;
 }
 
 interface PolicyCardProps {
@@ -46,9 +49,12 @@ export function PolicyCard({ policy, variant = "default", onClick }: PolicyCardP
         className="group relative overflow-hidden rounded-2xl bg-white shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer border border-gray-100 col-span-full"
       >
         <div className="p-8">
-          <div className="flex gap-2 mb-4">
+          <div className="flex flex-wrap gap-2 mb-4">
             <Badge className={statusColors[policy.status]}>{policy.status}</Badge>
             <Badge className={priorityColors[policy.priority]}>{policy.priority}</Badge>
+            {policy.targeted_labels?.map((label) => (
+              <Badge key={label} className="bg-purple-100 text-purple-800 border-purple-200">{label}</Badge>
+            ))}
           </div>
           <div className="text-sm font-medium text-blue-600 mb-2">{policy.category}</div>
           <h2 className="text-3xl font-bold mb-4 text-gray-900 group-hover:text-blue-600 transition-colors">
@@ -89,6 +95,13 @@ export function PolicyCard({ policy, variant = "default", onClick }: PolicyCardP
           </Badge>
           <span className="text-xs text-gray-500">{formatDate(policy.date)}</span>
         </div>
+        {policy.targeted_labels && policy.targeted_labels.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {policy.targeted_labels.map((label) => (
+              <Badge key={label} className="bg-purple-100 text-purple-800 border-purple-200 text-xs">{label}</Badge>
+            ))}
+          </div>
+        )}
         <div className="text-xs font-medium text-blue-600 mb-2">{policy.category}</div>
         <h3 className="font-semibold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors line-clamp-2">
           {policy.title}
@@ -119,6 +132,13 @@ export function PolicyCard({ policy, variant = "default", onClick }: PolicyCardP
             </Badge>
           </div>
         </div>
+        {policy.targeted_labels && policy.targeted_labels.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-3">
+            {policy.targeted_labels.map((label) => (
+              <Badge key={label} className="bg-purple-100 text-purple-800 border-purple-200 text-xs">{label}</Badge>
+            ))}
+          </div>
+        )}
         <h3 className="text-xl font-semibold mb-3 text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2">
           {policy.title}
         </h3>
@@ -132,6 +152,20 @@ export function PolicyCard({ policy, variant = "default", onClick }: PolicyCardP
             <Clock className="w-4 h-4" />
             <span>{formatDate(policy.date)}</span>
           </div>
+          {policy.funding_amount && (
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-gray-700">{policy.funding_amount}</span>
+              {policy.funding_pct_diff && (
+                <span className={`text-xs font-medium ${
+                  policy.funding_pct_diff.startsWith("+") ? "text-green-600" :
+                  policy.funding_pct_diff.startsWith("≈") ? "text-gray-400" :
+                  "text-red-500"
+                }`}>
+                  {policy.funding_pct_diff}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

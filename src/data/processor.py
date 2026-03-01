@@ -13,7 +13,7 @@ Usage (called directly by the scraper, or run standalone):
 """
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from src.data.database.db_connect import upsert_program
 
 
@@ -49,6 +49,24 @@ def map_program_type(program_type: str | None) -> str:
     return mapping.get(program_type or "other", "other")
 
 
+def parse_eligibility_flags(text: str | None) -> dict:
+    """Detect eligibility keywords in raw text to populate boolean flags."""
+    if not text:
+        return {
+            "veteran_only": False,
+            "senior_only": False,
+            "disability_preferred": False,
+            "currently_homeless_only": False,
+        }
+    t = text.lower()
+    return {
+        "veteran_only":            any(w in t for w in ("veteran", "military", "armed forces")),
+        "senior_only":             any(w in t for w in ("senior", "elder", "age 62", "age 65", "older adult")),
+        "disability_preferred":    any(w in t for w in ("disabilit", "disabled", "ada", "accessibility")),
+        "currently_homeless_only": any(w in t for w in ("homeless", "unhoused", "unsheltered", "shelter")),
+    }
+
+
 def process_opportunity(raw: dict) -> dict:
     """
     Convert a single raw scraper dict into a MongoDB-ready program document.
@@ -64,34 +82,34 @@ def process_opportunity(raw: dict) -> dict:
     """
     name = raw.get("opportunity") or "Unnamed Program"
     date_created = raw.get("date_created") or "unknown"
+    raw_eligibility = raw.get("eligibility")
+    raw_description = raw.get("description") or ""
+
+    # Combine description + eligibility text for keyword detection
+    combined_text = f"{raw_description} {raw_eligibility or ''}".strip()
+    flags = parse_eligibility_flags(combined_text)
 
     return {
         "slug":                       make_slug(name, date_created),
         "name":                       name,
-        "description_plain_english":  raw.get("description") or raw.get("eligibility") or "",
+        "description_plain_english":  raw_description or raw_eligibility or "",
         "benefit_type":               map_program_type(raw.get("program_type")),
         "status":                     raw.get("status") or "unknown",
-        "effective_date":             empty_to_none(raw.get("effective_date")),   # None = TBA
-        "closing_date":              empty_to_none(raw.get("closing_date")),     # None = no deadline stated
-        "apply_url":                  empty_to_none(raw.get("apply_url")),        # None = not yet available
+        "effective_date":             empty_to_none(raw.get("effective_date")),
+        "closing_date":               empty_to_none(raw.get("closing_date")),
+        "apply_url":                  empty_to_none(raw.get("apply_url")),
         "source_url":                 empty_to_none(raw.get("source_pdf")),
         "funding_amount":             empty_to_none(raw.get("funding_amount")),
         "date_created":               date_created,
-        "authority_level":            "city",                      # scraper targets SJ City Council
-        "last_scraped_at":            datetime.utcnow().isoformat(),
-        # Eligibility is stored as plain text from the scraper.
-        # Structured fields (veteran_only, income_limit, etc.) default to None
-        # until a richer extraction pass is added.
+        "authority_level":            "city",
+        "last_scraped_at":            datetime.now(timezone.utc).isoformat(),
         "eligibility": {
-            "raw_text":                raw.get("eligibility"),
+            "raw_text":                raw_eligibility,
             "location_states":         ["CA"],
             "location_cities":         ["San Jose"],
             "income_limit_annual":     None,
             "household_size_max":      None,
-            "veteran_only":            False,
-            "senior_only":             False,
-            "disability_preferred":    False,
-            "currently_homeless_only": False,
+            **flags,
         },
     }
 

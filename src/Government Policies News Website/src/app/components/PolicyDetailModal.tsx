@@ -19,6 +19,7 @@ interface Policy {
   closing_date?: string | null;
   source_url?: string | null;
   funding_amount?: string | null;
+  funding_pct_diff?: string | null;
 }
 
 interface PolicyDetailModalProps {
@@ -119,6 +120,15 @@ export function PolicyDetailModal({ policy, isOpen, onClose }: PolicyDetailModal
                 <div>
                   <div className="text-xs text-gray-500">Funding</div>
                   <div className="font-medium">{policy.funding_amount}</div>
+                  {policy.funding_pct_diff && (
+                    <div className={`text-xs font-medium mt-0.5 ${
+                      policy.funding_pct_diff.startsWith("+") ? "text-green-600" :
+                      policy.funding_pct_diff.startsWith("≈") ? "text-gray-500" :
+                      "text-red-500"
+                    }`}>
+                      {policy.funding_pct_diff}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -21,7 +21,9 @@ interface Policy {
   closing_date?: string | null;
   source_url?: string | null;
   funding_amount?: string | null;
+  funding_pct_diff?: string | null;
   benefit_type?: string;
+  targeted_labels?: string[];
 }
 
 interface Filters {
@@ -70,16 +72,24 @@ export default function App() {
       .catch(() => setLoading(false));
   }, [filters]);
 
-  // Client-side text search on top of server-filtered results
+  // Client-side text search + sort targeted programs to the top
   const filteredPolicies = useMemo(() => {
-    if (!searchQuery) return policies;
-    const q = searchQuery.toLowerCase();
-    return policies.filter(
-      (p) =>
-        p.title.toLowerCase().includes(q) ||
-        p.summary.toLowerCase().includes(q) ||
-        p.tags.some((t) => t.toLowerCase().includes(q))
-    );
+    let result = policies;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.title.toLowerCase().includes(q) ||
+          p.summary.toLowerCase().includes(q) ||
+          p.tags.some((t) => t.toLowerCase().includes(q))
+      );
+    }
+    // Targeted programs (matched to the user's profile) float to the top
+    return [...result].sort((a, b) => {
+      const aTargeted = (a.targeted_labels?.length ?? 0) > 0 ? 1 : 0;
+      const bTargeted = (b.targeted_labels?.length ?? 0) > 0 ? 1 : 0;
+      return bTargeted - aTargeted;
+    });
   }, [policies, searchQuery]);
 
   const stats = useMemo(() => ({
@@ -116,13 +126,89 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex justify-center mb-4">
-            <SearchBar value={searchQuery} onChange={setSearchQuery} />
-          </div>
-
           <FilterBar filters={filters} onChange={setFilters} />
         </div>
       </header>
+
+      {/* Banner with integrated search + profile filters */}
+      <div className="relative w-full">
+        <img
+          src="/banner.jpg"
+          alt="GovPolicy Hub banner"
+          className="w-full object-cover"
+          style={{ maxHeight: "340px", minHeight: "240px" }}
+        />
+        <div className="absolute inset-0 bg-black/45" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 px-6">
+          <SearchBar value={searchQuery} onChange={setSearchQuery} />
+          <div className="flex flex-wrap gap-x-8 gap-y-3 items-center justify-center bg-black/30 backdrop-blur-sm rounded-2xl px-8 py-4">
+            <div>
+              <p className="text-xs font-bold text-white uppercase tracking-widest mb-2">I am a...</p>
+              <div className="flex flex-wrap gap-4">
+                {[
+                  { key: "veteranOnly",         label: "Veteran" },
+                  { key: "seniorOnly",          label: "Senior (65+)" },
+                  { key: "disabilityPreferred", label: "Person with Disability" },
+                  { key: "currentlyHomeless",   label: "Currently Homeless" },
+                ].map(({ key, label }) => {
+                  const checked = filters[key as keyof Filters] as boolean;
+                  return (
+                    <label key={key} className="flex items-center gap-2 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => setFilters({ ...filters, [key]: e.target.checked })}
+                        className="w-5 h-5 accent-blue-400"
+                      />
+                      <span className={`text-base font-semibold transition-colors ${checked ? "text-white" : "text-white/90 group-hover:text-white"}`}>
+                        {label}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex gap-5">
+              <div>
+                <label className="block text-xs font-bold text-white uppercase tracking-widest mb-1.5">
+                  Annual Income
+                </label>
+                <select
+                  value={filters.maxIncome}
+                  onChange={(e) => setFilters({ ...filters, maxIncome: e.target.value })}
+                  className="w-48 px-3 py-2 text-base font-medium border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-gray-800"
+                >
+                  <option value="" className="text-gray-900 bg-white">Any income</option>
+                  <option value="20000" className="text-gray-900 bg-white">Under $20,000</option>
+                  <option value="35000" className="text-gray-900 bg-white">$20,000 – $35,000</option>
+                  <option value="50000" className="text-gray-900 bg-white">$35,000 – $50,000</option>
+                  <option value="80000" className="text-gray-900 bg-white">$50,000 – $80,000</option>
+                  <option value="120000" className="text-gray-900 bg-white">$80,000 – $120,000</option>
+                  <option value="999999" className="text-gray-900 bg-white">Over $120,000</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-white uppercase tracking-widest mb-1.5">
+                  Household Size
+                </label>
+                <select
+                  value={filters.householdSize}
+                  onChange={(e) => setFilters({ ...filters, householdSize: e.target.value })}
+                  className="w-48 px-3 py-2 text-base font-medium border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-gray-800"
+                >
+                  <option value="" className="text-gray-900 bg-white">Any size</option>
+                  <option value="1" className="text-gray-900 bg-white">1 person</option>
+                  <option value="2" className="text-gray-900 bg-white">2 people</option>
+                  <option value="3" className="text-gray-900 bg-white">3 people</option>
+                  <option value="4" className="text-gray-900 bg-white">4 people</option>
+                  <option value="5" className="text-gray-900 bg-white">5 people</option>
+                  <option value="6" className="text-gray-900 bg-white">6+ people</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
