@@ -1,9 +1,11 @@
-import { useState, useMemo, useEffect } from "react";
-import { FileText, TrendingUp, AlertCircle } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { FileText, TrendingUp, AlertCircle, Bookmark, ChevronDown } from "lucide-react";
 import { PolicyCard } from "./components/PolicyCard";
 import { SearchBar } from "./components/SearchBar";
-import { FilterBar } from "./components/FilterBar";
 import { PolicyDetailModal } from "./components/PolicyDetailModal";
+import { UserMenu } from "./components/UserMenu";
+import { Toast } from "./components/Toast";
+import { useAuth } from "../AuthContext";
 
 interface Policy {
   id: string;
@@ -21,7 +23,9 @@ interface Policy {
   closing_date?: string | null;
   source_url?: string | null;
   funding_amount?: string | null;
+  funding_pct_diff?: string | null;
   benefit_type?: string;
+  targeted_labels?: string[];
 }
 
 interface Filters {
@@ -45,12 +49,103 @@ const DEFAULT_FILTERS: Filters = {
 };
 
 export default function App() {
+  const { user } = useAuth();
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [bannerPassed, setBannerPassed] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [subscribedIds, setSubscribedIds] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<string | null>(null);
+  const [showSaved, setShowSaved] = useState(false);
+  const [sortBy, setSortBy] = useState("relevance");
+  const bannerRef = useRef<HTMLDivElement>(null);
+
+  // Load saved policies when user logs in
+  useEffect(() => {
+    if (!user) { setSavedIds(new Set()); return; }
+    user.getIdToken().then((token) =>
+      fetch("/api/saves", { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((ids: string[]) => setSavedIds(new Set(ids)))
+        .catch(() => {})
+    );
+  }, [user]);
+
+  // Load subscriptions when user logs in
+  useEffect(() => {
+    if (!user) { setSubscribedIds(new Set()); return; }
+    user.getIdToken().then((token) =>
+      fetch("/api/subscriptions", { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((ids: string[]) => setSubscribedIds(new Set(ids)))
+        .catch(() => {})
+    );
+  }, [user]);
+
+  const handleSave = async (policyId: string) => {
+    if (!user) return;
+    const token = await user.getIdToken();
+    const isSaved = savedIds.has(policyId);
+    const method = isSaved ? "DELETE" : "POST";
+    const url = isSaved ? `/api/saves/${policyId}` : "/api/saves";
+    const body = isSaved ? undefined : JSON.stringify({ policy_id: policyId });
+    await fetch(url, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body,
+    });
+    setSavedIds((prev) => {
+      const next = new Set(prev);
+      isSaved ? next.delete(policyId) : next.add(policyId);
+      return next;
+    });
+    if (!isSaved) setToast("Policy saved to your account.");
+  };
+
+  const handleSubscribe = async (policyId: string) => {
+    if (!user) return;
+    const token = await user.getIdToken();
+    const isSubscribed = subscribedIds.has(policyId);
+    const method = isSubscribed ? "DELETE" : "POST";
+    const url = isSubscribed ? `/api/subscriptions/${policyId}` : "/api/subscriptions";
+    const body = isSubscribed ? undefined : JSON.stringify({ policy_id: policyId });
+    await fetch(url, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body,
+    });
+    setSubscribedIds((prev) => {
+      const next = new Set(prev);
+      isSubscribed ? next.delete(policyId) : next.add(policyId);
+      return next;
+    });
+    if (!isSubscribed) setToast("You will receive email notifications when a change is made.");
+  };
+
+  useEffect(() => {
+    const onScroll = () => {
+      if (bannerRef.current) {
+        setBannerPassed(window.scrollY >= bannerRef.current.offsetTop + bannerRef.current.offsetHeight);
+      }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest(".search-filter-wrapper")) {
+        setFiltersOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   // Fetch from backend whenever filters change
   useEffect(() => {
@@ -66,63 +161,221 @@ export default function App() {
     setLoading(true);
     fetch(`/api/policies?${params}`)
       .then((r) => r.json())
-      .then((data) => { setPolicies(data); setLoading(false); })
+      .then((data: Policy[]) => {
+        const STOPWORDS = new Set(["of","the","a","an","for","and","or","to","in","at","by","from","with","is","its","are","on","as","be"]);
+        const sigWords = (t: string) => new Set(
+          t.toLowerCase().replace(/[^\w\s]/g, " ").split(/\s+/).filter(w => w.length > 2 && !STOPWORDS.has(w))
+        );
+        const isDup = (a: Set<string>, b: Set<string>) => {
+          if (!a.size || !b.size) return false;
+          const [short, long] = a.size <= b.size ? [a, b] : [b, a];
+          if (short.size < 3) return a.size === b.size && [...a].every(w => b.has(w));
+          return [...short].filter(w => long.has(w)).length / short.size >= 0.85;
+        };
+        const sorted = [...data].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+        const groups: Policy[] = [];
+        const groupSets: Set<string>[] = [];
+        for (const p of sorted) {
+          const ws = sigWords(p.title);
+          if (!groupSets.some(gs => isDup(ws, gs))) { groups.push(p); groupSets.push(ws); }
+        }
+        setPolicies(groups);
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, [filters]);
 
-  // Client-side text search on top of server-filtered results
+  // Client-side text search + sort
   const filteredPolicies = useMemo(() => {
-    if (!searchQuery) return policies;
-    const q = searchQuery.toLowerCase();
-    return policies.filter(
-      (p) =>
-        p.title.toLowerCase().includes(q) ||
-        p.summary.toLowerCase().includes(q) ||
-        p.tags.some((t) => t.toLowerCase().includes(q))
-    );
-  }, [policies, searchQuery]);
+    let result = policies;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.title.toLowerCase().includes(q) ||
+          p.summary.toLowerCase().includes(q) ||
+          p.tags.some((t) => t.toLowerCase().includes(q))
+      );
+    }
+    return [...result].sort((a, b) => {
+      switch (sortBy) {
+        case "alpha-asc":
+          return a.title.localeCompare(b.title);
+        case "alpha-desc":
+          return b.title.localeCompare(a.title);
+        case "date-desc":
+          return (b.date || "").localeCompare(a.date || "");
+        case "date-asc":
+          return (a.date || "").localeCompare(b.date || "");
+        case "funding-desc": {
+          const aAmt = parseFloat((a.funding_amount || "0").replace(/[^0-9.]/g, "")) || 0;
+          const bAmt = parseFloat((b.funding_amount || "0").replace(/[^0-9.]/g, "")) || 0;
+          return bAmt - aAmt;
+        }
+        default: // "relevance" — targeted programs first
+          return ((b.targeted_labels?.length ?? 0) > 0 ? 1 : 0) -
+                 ((a.targeted_labels?.length ?? 0) > 0 ? 1 : 0);
+      }
+    });
+  }, [policies, searchQuery, sortBy]);
 
-  const stats = useMemo(() => ({
-    total: policies.length,
-    active: policies.filter((p) => p.status === "Active").length,
-  }), [policies]);
+  const displayedPolicies = showSaved ? filteredPolicies.filter(p => savedIds.has(p.id)) : filteredPolicies;
+
+  const anyProfileActive = filters.veteranOnly || filters.seniorOnly || filters.disabilityPreferred || filters.currentlyHomeless;
+
+  const targetedPolicies = anyProfileActive ? displayedPolicies.filter(p => (p.targeted_labels?.length ?? 0) > 0) : [];
+  const otherPolicies    = anyProfileActive ? displayedPolicies.filter(p => (p.targeted_labels?.length ?? 0) === 0) : displayedPolicies;
+
+  const profileLabel = [
+    filters.veteranOnly         && "Veterans",
+    filters.seniorOnly          && "Seniors (65+)",
+    filters.disabilityPreferred && "People with Disabilities",
+    filters.currentlyHomeless   && "People Experiencing Homelessness",
+  ].filter(Boolean).join(" & ");
 
   const featuredPolicy = filteredPolicies[0];
+
+  const filterDropdown = (
+    <div className="absolute top-full left-0 right-0 mt-2 z-50 rounded-2xl bg-white shadow-xl border border-gray-100">
+      {/* Row 1: checkboxes */}
+      <div className="flex items-center gap-6 px-6 pt-4 pb-3">
+        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest shrink-0">I am a...</span>
+        {[
+          { key: "veteranOnly",         label: "Veteran" },
+          { key: "seniorOnly",          label: "Senior (65+)" },
+          { key: "disabilityPreferred", label: "Person with Disability" },
+          { key: "currentlyHomeless",   label: "Currently Homeless" },
+        ].map(({ key, label }) => {
+          const checked = filters[key as keyof Filters] as boolean;
+          return (
+            <label key={key} className="flex items-center gap-1.5 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={(e) => setFilters({ ...filters, [key]: e.target.checked })}
+                className="w-4 h-4 accent-blue-500"
+              />
+              <span className={`text-sm font-medium transition-colors ${checked ? "text-blue-600" : "text-gray-600 group-hover:text-gray-900"}`}>
+                {label}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      {/* Row 2: selects */}
+      <div className="flex items-center gap-4 px-6 pb-4 pt-2 border-t border-gray-100">
+        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest shrink-0">Sort by...</span>
+        <div className="relative flex-1">
+          <select
+            value={filters.maxIncome}
+            onChange={(e) => setFilters({ ...filters, maxIncome: e.target.value })}
+            className="w-full px-3 py-1.5 pr-8 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 appearance-none cursor-pointer"
+          >
+            <option value="">Income</option>
+            <option value="20000">Under $20k</option>
+            <option value="35000">$20k – $35k</option>
+            <option value="50000">$35k – $50k</option>
+            <option value="80000">$50k – $80k</option>
+            <option value="120000">$80k – $120k</option>
+            <option value="999999">Over $120k</option>
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-900 pointer-events-none" />
+        </div>
+        <div className="relative flex-1">
+          <select
+            value={filters.householdSize}
+            onChange={(e) => setFilters({ ...filters, householdSize: e.target.value })}
+            className="w-full px-3 py-1.5 pr-8 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 appearance-none cursor-pointer"
+          >
+            <option value="">Household Size</option>
+            <option value="1">1 person</option>
+            <option value="2">2 people</option>
+            <option value="3">3 people</option>
+            <option value="4">4 people</option>
+            <option value="5">5 people</option>
+            <option value="6">6+ people</option>
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-900 pointer-events-none" />
+        </div>
+        <div className="relative flex-1">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="w-full px-3 py-1.5 pr-8 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 appearance-none cursor-pointer"
+          >
+            <option value="relevance">Sort: Relevance</option>
+            <option value="date-desc">Sort: Most Recent</option>
+            <option value="date-asc">Sort: Oldest First</option>
+            <option value="alpha-asc">Sort: A → Z</option>
+            <option value="alpha-desc">Sort: Z → A</option>
+            <option value="funding-desc">Sort: Highest Funding</option>
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-900 pointer-events-none" />
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
-                <FileText className="w-7 h-7 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">GovPolicy Hub</h1>
-                <p className="text-sm text-gray-500">San Jose Housing Policy Center</p>
-              </div>
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center gap-6">
+          <button
+            className="flex items-center gap-3 shrink-0 group"
+            onClick={() => { setSearchQuery(""); setFilters(DEFAULT_FILTERS); setSortBy("relevance"); setShowSaved(false); setFiltersOpen(false); }}
+          >
+            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center group-hover:bg-blue-700 transition-colors">
+              <FileText className="w-6 h-6 text-white" />
             </div>
-            <div className="hidden md:flex gap-6">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-                <div className="text-xs text-gray-500">Total Policies</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">{stats.active}</div>
-                <div className="text-xs text-gray-500">Active</div>
-              </div>
+            <div className="text-left">
+              <h1 className="text-xl font-bold text-gray-900">GovPolicy Hub</h1>
+              <p className="text-xs text-gray-500">San Jose Housing Policy Center</p>
             </div>
+          </button>
+          {bannerPassed && (
+            <div className="search-filter-wrapper flex-1 relative">
+              <SearchBar value={searchQuery} onChange={setSearchQuery} onFocus={() => setFiltersOpen(true)} />
+              {filtersOpen && filterDropdown}
+            </div>
+          )}
+          <div className="ml-auto flex items-center gap-3 shrink-0">
+            <UserMenu />
+            {user && (
+              <button
+                onClick={() => setShowSaved((s) => !s)}
+                title={showSaved ? "Show all policies" : "Show saved policies"}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors border ${
+                  showSaved
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-blue-400 hover:text-blue-600"
+                }`}
+              >
+                <Bookmark className="w-4 h-4" />
+                Saved{showSaved ? "" : savedIds.size > 0 ? ` (${savedIds.size})` : ""}
+              </button>
+            )}
           </div>
-
-          <div className="flex justify-center mb-4">
-            <SearchBar value={searchQuery} onChange={setSearchQuery} />
-          </div>
-
-          <FilterBar filters={filters} onChange={setFilters} />
         </div>
       </header>
+
+      {/* Banner */}
+      <div ref={bannerRef} className="relative w-full">
+        <img
+          src="/banner.jpg"
+          alt="GovPolicy Hub banner"
+          className="w-full object-cover"
+          style={{ maxHeight: "340px", minHeight: "240px" }}
+        />
+        <div className="absolute inset-0 bg-black/45" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-6 gap-4">
+          <h2 className="text-8xl font-bold text-white drop-shadow-lg tracking-tight">City of San Jose</h2>
+          <div className="search-filter-wrapper relative w-full max-w-2xl">
+            <SearchBar value={searchQuery} onChange={setSearchQuery} onFocus={() => setFiltersOpen(true)} />
+            {filtersOpen && filterDropdown}
+          </div>
+        </div>
+      </div>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
@@ -150,25 +403,71 @@ export default function App() {
             {/* Results Header */}
             <div className="mb-6">
               <h2 className="text-xl font-bold text-gray-900">
-                {searchQuery ? `Search Results (${filteredPolicies.length})` : "All Policies"}
+                {showSaved ? "Saved Policies" : searchQuery ? `Search Results (${displayedPolicies.length})` : "All Policies"}
               </h2>
               <p className="text-sm text-gray-500 mt-1">
-                {filteredPolicies.length} {filteredPolicies.length === 1 ? "policy" : "policies"} found
+                {displayedPolicies.length} {displayedPolicies.length === 1 ? "policy" : "policies"} found
               </p>
             </div>
 
-            {/* Policy Grid */}
-            {filteredPolicies.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredPolicies.map((policy, index) => (
-                  <PolicyCard
-                    key={policy.id}
-                    policy={policy}
-                    variant={index % 7 === 0 && index !== 0 ? "compact" : "default"}
-                    onClick={() => { setSelectedPolicy(policy); setIsModalOpen(true); }}
-                  />
-                ))}
-              </div>
+            {/* Policy Grid — split into targeted + other when profile filters are active */}
+            {displayedPolicies.length > 0 ? (
+              <>
+                {anyProfileActive && targetedPolicies.length > 0 && (
+                  <div className="mb-10">
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded-full uppercase tracking-wide">
+                        For {profileLabel}
+                      </span>
+                      <span className="text-sm text-gray-400">{targetedPolicies.length} tailored {targetedPolicies.length === 1 ? "program" : "programs"}</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {targetedPolicies.map((policy) => (
+                        <PolicyCard
+                          key={policy.id}
+                          policy={policy}
+                          variant="default"
+                          onClick={() => { setSelectedPolicy(policy); setIsModalOpen(true); }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {anyProfileActive && otherPolicies.length > 0 && (
+                  <div className="mb-4">
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="px-3 py-1 bg-gray-200 text-gray-600 text-xs font-bold rounded-full uppercase tracking-wide">
+                        Also Eligible
+                      </span>
+                      <span className="text-sm text-gray-400">{otherPolicies.length} additional {otherPolicies.length === 1 ? "program" : "programs"}</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {otherPolicies.map((policy) => (
+                        <PolicyCard
+                          key={policy.id}
+                          policy={policy}
+                          variant="default"
+                          onClick={() => { setSelectedPolicy(policy); setIsModalOpen(true); }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!anyProfileActive && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {displayedPolicies.map((policy, index) => (
+                      <PolicyCard
+                        key={policy.id}
+                        policy={policy}
+                        variant={index % 7 === 0 && index !== 0 ? "compact" : "default"}
+                        onClick={() => { setSelectedPolicy(policy); setIsModalOpen(true); }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
             ) : (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
@@ -176,7 +475,9 @@ export default function App() {
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">No Policies Found</h3>
                 <p className="text-gray-500 max-w-md">
-                  {searchQuery
+                  {showSaved
+                    ? "You haven't saved any policies yet. Click the bookmark icon on a policy to save it."
+                    : searchQuery
                     ? `No policies match "${searchQuery}". Try different keywords.`
                     : "No policies match your current filters. Try adjusting them."}
                 </p>
@@ -196,7 +497,14 @@ export default function App() {
         policy={selectedPolicy}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        isSaved={selectedPolicy ? savedIds.has(selectedPolicy.id) : false}
+        onSave={selectedPolicy ? () => handleSave(selectedPolicy.id) : undefined}
+        isLoggedIn={!!user}
+        isSubscribed={selectedPolicy ? subscribedIds.has(selectedPolicy.id) : false}
+        onSubscribe={selectedPolicy ? () => handleSubscribe(selectedPolicy.id) : undefined}
       />
+
+      {toast && <Toast key={toast} message={toast} onDone={() => setToast(null)} />}
     </div>
   );
 }

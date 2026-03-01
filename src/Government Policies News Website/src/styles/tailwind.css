@@ -2,3 +2,34 @@
 @source '../**/*.{js,ts,jsx,tsx}';
 
 @import 'tw-animate-css';
+
+@keyframes bell-ring {
+  0%, 100% { transform: rotate(0deg); }
+  15%  { transform: rotate(-18deg); }
+  35%  { transform: rotate(18deg); }
+  55%  { transform: rotate(-12deg); }
+  75%  { transform: rotate(12deg); }
+  90%  { transform: rotate(-4deg); }
+}
+
+@keyframes bookmark-pop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.45); }
+  65%  { transform: scale(0.88); }
+  100% { transform: scale(1); }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to   { opacity: 0; transform: translateX(-50%) translateY(12px); }
+}
+
+.animate-bell-ring     { animation: bell-ring     0.55s ease-in-out; }
+.animate-bookmark-pop  { animation: bookmark-pop  0.38s ease-out; }
+.animate-toast-in      { animation: toast-in      0.28s ease-out  forwards; }
+.animate-toast-out     { animation: toast-out     0.28s ease-in   forwards; }
