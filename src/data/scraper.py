@@ -27,6 +27,7 @@ import json
 import hashlib
 import requests
 import anthropic
+from time import sleep
 from datetime import datetime
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
@@ -42,6 +43,7 @@ TARGET_URL = (
     "https://sanjose.legistar.com/DepartmentDetail.aspx"
     "?ID=21676&GUID=ACCCCFF5-F14A-4E1A-8540-9065F45A8A90&Search=city+council"
 )
+#https://sanjose.legistar.com/DepartmentDetail.aspx?ID=21676&GUID=ACCCCFF5-F14A-4E1A-8540-9065F45A8A90&Search=city+council
 BASE_URL        = "https://sanjose.legistar.com"
 OUTPUT_CSV      = "housing_opportunities.csv"
 SEEN_PDFS_FILE  = "seen_pdfs.json"   # tracks already-processed PDFs across runs
@@ -164,11 +166,11 @@ def pdf_fingerprint(url: str) -> str:
     """Stable ID for a PDF URL so we don't reprocess it."""
     return hashlib.md5(url.encode()).hexdigest()
 
-
 def load_seen_pdfs() -> set:
-    if os.path.exists(SEEN_PDFS_FILE):
-        with open(SEEN_PDFS_FILE) as f:
-            return set(json.load(f))
+    # remove comments:
+   if (os.path.exists(SEEN_PDFS_FILE)):
+       with open(SEEN_PDFS_FILE) as f:
+          return set(json.load(f))
     return set()
 
 
@@ -235,14 +237,15 @@ def extract_opportunities_via_llm(
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
     chunks = re.split(r'\n(?=\d+\.\d+)', text)
-    x = 0
-    for chunk in chunks:
-        x+=1
-        print(chunk)
-        print("----------")
-        if (x >=3): 
-            break
-    return []
+    # For testing purposes
+    # x = 0
+    # for chunk in chunks:
+    #     x+=1
+    #     print(chunk)
+    #     print("----------")
+    #     if (x >=3): 
+    #         break
+    # return []
     all_opportunities = []
 
     for chunk in chunks:
@@ -308,12 +311,12 @@ def run():
 
     # 3. Load already-seen PDFs (skip reprocessing)
     seen = load_seen_pdfs()
-    new_pdfs = [pdf_links[0]]#[p for p in pdf_links if pdf_fingerprint(p["url"]) not in seen]
+    new_pdfs = [p for p in pdf_links if pdf_fingerprint(p["url"]) not in seen]
     print(f"[2/4] {len(new_pdfs)} new PDF(s) to process (skipping {len(pdf_links) - len(new_pdfs)} already seen)\n")
 
-    # if not new_pdfs:
-    #     print("Nothing new today. Run again tomorrow.")
-    #     return
+    if not new_pdfs:
+        print("Nothing new today. Run again tomorrow.")
+        return
 
     all_opportunities = []
 
@@ -333,7 +336,7 @@ def run():
 
         if opportunities:
             print(f"  Found {len(opportunities)} housing opportunity/ies")
-            all_opportunities.extend(opportunitiesf)
+            all_opportunities.extend(opportunities)
         else:
             print("  No housing opportunities found in this PDF")
 
@@ -356,3 +359,9 @@ def run():
 if __name__ == "__main__":
     print("Hello World.")
     run()
+
+    # Update weekly.
+    while (True):
+        sleep(24*3600)
+        run()
+    
