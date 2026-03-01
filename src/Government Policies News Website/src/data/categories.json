@@ -1,0 +1,62 @@
+[
+  {
+    "id": "all",
+    "name": "All Policies",
+    "icon": "LayoutGrid"
+  },
+  {
+    "id": "environment",
+    "name": "Environment",
+    "icon": "Leaf"
+  },
+  {
+    "id": "technology",
+    "name": "Technology",
+    "icon": "Laptop"
+  },
+  {
+    "id": "healthcare",
+    "name": "Healthcare",
+    "icon": "Heart"
+  },
+  {
+    "id": "education",
+    "name": "Education",
+    "icon": "GraduationCap"
+  },
+  {
+    "id": "economy",
+    "name": "Economy",
+    "icon": "TrendingUp"
+  },
+  {
+    "id": "housing",
+    "name": "Housing",
+    "icon": "Home"
+  },
+  {
+    "id": "transportation",
+    "name": "Transportation",
+    "icon": "Bus"
+  },
+  {
+    "id": "security",
+    "name": "Security",
+    "icon": "Shield"
+  },
+  {
+    "id": "employment",
+    "name": "Employment",
+    "icon": "Briefcase"
+  },
+  {
+    "id": "agriculture",
+    "name": "Agriculture",
+    "icon": "Sprout"
+  },
+  {
+    "id": "defense",
+    "name": "Defense",
+    "icon": "Flag"
+  }
+]

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>San Jose Policy Portal</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <div class="container">
+        <h1>San Jose Policy Finder</h1>
+        <p>Find government policies and affordable housing projects based on your needs.</p>
+
+        <div class="search-section">
+            <input type="text" id="searchInput" placeholder="Search keywords (e.g. 'housing', 'rent', 'subsidy')...">
+        </div>
+
+        <div id="moduleContainer" class="module-grid">
+            <p class="loading-text">Enter a keyword to discover relevant policies.</p>
+        </div>
+    </div>
+
+    <div id="policyModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2 id="modalTitle"></h2>
+            <hr>
+            <div id="modalBody">
+                <p><strong>Overview:</strong> <span id="modalOverview"></span></p>
+                <p><strong>Eligibility:</strong> <span id="modalEligibility"></span></p>
+                <div id="modalLinks">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
