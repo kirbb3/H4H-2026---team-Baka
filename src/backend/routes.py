@@ -104,6 +104,7 @@ _ADMIN_PATTERNS = re.compile(
         r"\btask force (reactivation|formation)\b",
         r"\bspending allocations for fiscal year\b",
         r"^\s*(ab|sb)\s+\d+",          # state legislative bill positions, e.g. "AB 1234"
+        r"\bdensity assessment\b",     # internal zoning/land-use assessments, not resident-facing
     ]),
     re.IGNORECASE,
 )
