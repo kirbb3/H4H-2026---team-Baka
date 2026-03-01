@@ -1,3 +1,26 @@
+// PolicyDetailModal.tsx
+// Full-screen modal that shows the complete details of a single policy.
+//
+// Sections (top to bottom):
+//   1. Blue gradient header with status badge and policy title
+//   2. Category pill
+//   3. Metadata grid — department, published date, effective date, closing date, funding
+//   4. Summary paragraph
+//   5. Details section (eligibility + funding text, only when different from summary)
+//   6. Implementation date banner — green if known, yellow if not yet announced
+//   7. Tags
+//   8. Action buttons — Find Out More, Apply Now (optional), Bookmark, Bell
+//
+// Props:
+//   policy      — the policy to display, or null (modal won't render)
+//   isOpen      — controls Dialog visibility
+//   onClose     — called when the user dismisses the modal
+//   isSaved     — whether the current user has bookmarked this policy
+//   onSave      — toggles the bookmark (requires login)
+//   isLoggedIn  — disables bookmark/bell when false
+//   isSubscribed— whether the user is subscribed to email alerts
+//   onSubscribe — toggles the email subscription (requires login)
+
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Badge } from "./ui/badge";
@@ -39,31 +62,38 @@ export function PolicyDetailModal({
   isSaved, onSave, isLoggedIn,
   isSubscribed, onSubscribe,
 }: PolicyDetailModalProps) {
+  // Short CSS animation states — triggered on click and auto-reset after a short delay.
   const [bellAnim, setBellAnim] = useState(false);
   const [bookmarkAnim, setBookmarkAnim] = useState(false);
 
+  // Don't render anything if no policy is selected.
   if (!policy) return null;
 
+  // ── Color maps ─────────────────────────────────────────────────────────────
+  // Unused currently but kept for future priority badge use.
   const priorityColors: Record<string, string> = {
     Critical: "bg-red-100 text-red-800 border-red-200",
-    High: "bg-orange-100 text-orange-800 border-orange-200",
-    Medium: "bg-blue-100 text-blue-800 border-blue-200",
-    Low: "bg-gray-100 text-gray-800 border-gray-200"
+    High:     "bg-orange-100 text-orange-800 border-orange-200",
+    Medium:   "bg-blue-100 text-blue-800 border-blue-200",
+    Low:      "bg-gray-100 text-gray-800 border-gray-200"
   };
 
+  // Background + text colour for the status badge in the header.
   const statusColors: Record<string, string> = {
-    Active: "bg-green-100 text-green-800",
-    Proposed: "bg-yellow-100 text-yellow-800",
-    "Under Review": "bg-blue-100 text-blue-800",
-    Archived: "bg-gray-100 text-gray-800"
+    Active:        "bg-green-100 text-green-800",
+    Proposed:      "bg-yellow-100 text-yellow-800",
+    "Under Review":"bg-blue-100 text-blue-800",
+    Archived:      "bg-gray-100 text-gray-800"
   };
 
+  /** Format an ISO or US date string into a human-readable form, e.g. "March 1, 2026". */
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return dateStr;
+    if (isNaN(date.getTime())) return dateStr; // return as-is if unparseable
     return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
+  /** Trigger the bookmark action with a brief pop animation. */
   const handleBookmarkClick = () => {
     if (!isLoggedIn || !onSave) return;
     setBookmarkAnim(true);
@@ -71,6 +101,7 @@ export function PolicyDetailModal({
     onSave();
   };
 
+  /** Trigger the subscription toggle with a brief bell-ring animation. */
   const handleBellClick = () => {
     if (!isLoggedIn || !onSubscribe) return;
     setBellAnim(true);
@@ -81,6 +112,8 @@ export function PolicyDetailModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0">
+
+        {/* Floating close button — overlays the blue header */}
         <button
           onClick={onClose}
           className="absolute right-4 top-4 z-10 rounded-full bg-white/90 p-2 hover:bg-white transition-colors shadow-lg"
@@ -88,9 +121,10 @@ export function PolicyDetailModal({
           <X className="w-5 h-5" />
         </button>
 
-        {/* Header */}
+        {/* ── Blue gradient header ───────────────────────────────────────── */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-8 text-white">
           <div className="flex gap-2 mb-4">
+            {/* Status badge — colour reflects whether the policy is active, proposed, etc. */}
             <Badge className={statusColors[policy.status]}>{policy.status}</Badge>
           </div>
           <DialogHeader>
@@ -101,14 +135,17 @@ export function PolicyDetailModal({
         </div>
 
         <div className="p-8">
+          {/* Category pill — e.g. "Rental Assistance", "Homebuyer" */}
           <div className="mb-6">
             <span className="inline-block px-4 py-1.5 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
               {policy.category}
             </span>
           </div>
 
-          {/* Metadata grid */}
+          {/* ── Metadata grid ──────────────────────────────────────────────── */}
+          {/* Shows at most 4 cells depending on which fields are populated.   */}
           <div className="grid grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+            {/* Department — always present */}
             <div className="flex items-center gap-2 text-gray-700">
               <Building2 className="w-5 h-5 text-gray-400" />
               <div>
@@ -116,6 +153,8 @@ export function PolicyDetailModal({
                 <div className="font-medium">{policy.department}</div>
               </div>
             </div>
+
+            {/* Published date — date of the council meeting where it was discussed */}
             <div className="flex items-center gap-2 text-gray-700">
               <Clock className="w-5 h-5 text-gray-400" />
               <div>
@@ -123,6 +162,8 @@ export function PolicyDetailModal({
                 <div className="font-medium">{formatDate(policy.date)}</div>
               </div>
             </div>
+
+            {/* Effective date — only shown when the scraper extracted one from the memo */}
             {policy.effective_date && (
               <div className="flex items-center gap-2 text-gray-700">
                 <Clock className="w-5 h-5 text-green-500" />
@@ -132,6 +173,8 @@ export function PolicyDetailModal({
                 </div>
               </div>
             )}
+
+            {/* Closing/deadline date — shown in red to convey urgency */}
             {policy.closing_date && (
               <div className="flex items-center gap-2 text-gray-700">
                 <Clock className="w-5 h-5 text-red-400" />
@@ -141,11 +184,14 @@ export function PolicyDetailModal({
                 </div>
               </div>
             )}
+
+            {/* Funding — shown with a relative-to-average label when available */}
             {policy.funding_amount && (
               <div className="flex items-center gap-2 text-gray-700">
                 <div>
                   <div className="text-xs text-gray-500">Funding</div>
                   <div className="font-medium">{policy.funding_amount}</div>
+                  {/* funding_pct_diff is a string like "+46% above average" */}
                   {policy.funding_pct_diff && (
                     <div className={`text-xs font-medium mt-0.5 ${
                       policy.funding_pct_diff.startsWith("+") ? "text-green-600" :
@@ -160,11 +206,15 @@ export function PolicyDetailModal({
             )}
           </div>
 
+          {/* ── Summary ────────────────────────────────────────────────────── */}
           <div className="mb-6">
             <h3 className="font-semibold text-lg mb-3 text-gray-900">Summary</h3>
             <p className="text-gray-700 text-lg leading-relaxed">{policy.summary}</p>
           </div>
 
+          {/* ── Details ─────────────────────────────────────────────────────── */}
+          {/* The "content" field appends eligibility + funding text to the summary.
+              Only render this section when there's genuinely extra content. */}
           {policy.content && policy.content !== policy.summary && (
             <div className="mb-6">
               <h3 className="font-semibold text-lg mb-3 text-gray-900">Details</h3>
@@ -172,6 +222,9 @@ export function PolicyDetailModal({
             </div>
           )}
 
+          {/* ── Implementation date banner ───────────────────────────────────
+              Green = date known (extracted by scraper from the memorandum).
+              Yellow = policy approved but no implementation date announced yet. */}
           {policy.effective_date ? (
             <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
               <p className="text-green-800 text-sm">
@@ -186,6 +239,7 @@ export function PolicyDetailModal({
             </div>
           )}
 
+          {/* ── Tags ────────────────────────────────────────────────────────── */}
           <div className="mb-6">
             <h3 className="font-semibold text-lg mb-3 text-gray-900">Tags</h3>
             <div className="flex flex-wrap gap-2">
@@ -200,7 +254,10 @@ export function PolicyDetailModal({
             </div>
           </div>
 
+          {/* ── Action buttons ──────────────────────────────────────────────── */}
           <div className="flex gap-3">
+            {/* "Find Out More" — primary CTA, links to the agenda page (source_url)
+                or falls back to apply_url if that's all we have. */}
             {(policy.source_url || policy.apply_url) && (
               <Button
                 className="flex-1 bg-blue-600 hover:bg-blue-700"
@@ -209,6 +266,9 @@ export function PolicyDetailModal({
                 Find Out More
               </Button>
             )}
+
+            {/* "Apply Now" — secondary CTA, only shown when the scraper found a
+                dedicated application URL in the memorandum ANALYSIS section. */}
             {policy.apply_url && (
               <Button
                 variant="outline"
@@ -219,7 +279,8 @@ export function PolicyDetailModal({
               </Button>
             )}
 
-            {/* Bookmark button */}
+            {/* Bookmark button — saves the policy to the user's account.
+                Dimmed when not logged in; shows a filled icon when already saved. */}
             <Button
               variant="outline"
               onClick={handleBookmarkClick}
@@ -231,7 +292,8 @@ export function PolicyDetailModal({
               </span>
             </Button>
 
-            {/* Bell / notification button */}
+            {/* Bell button — subscribes the user to email notifications for this policy.
+                Amber when subscribed, neutral otherwise. Dimmed when not logged in. */}
             <Button
               variant="outline"
               onClick={handleBellClick}

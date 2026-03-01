@@ -1,3 +1,16 @@
+// App.tsx
+// Root component for GovPolicy Hub.
+//
+// Responsibilities:
+//   - Fetches housing programs from the Flask backend (/api/policies) whenever
+//     the user changes their filter selections.
+//   - Deduplicates the returned programs client-side (word-set similarity).
+//   - Applies text search and sort order client-side (no extra network round-trip).
+//   - Manages saved-policy and subscription state, syncing with the backend
+//     when the user is logged in.
+//   - Renders the sticky header, hero banner with search bar, policy grid,
+//     detail modal, and footer.
+
 import { useState, useMemo, useEffect, useRef } from "react";
 import { FileText, TrendingUp, AlertCircle, Bookmark, ChevronDown } from "lucide-react";
 import { PolicyCard } from "./components/PolicyCard";
@@ -7,37 +20,40 @@ import { UserMenu } from "./components/UserMenu";
 import { Toast } from "./components/Toast";
 import { useAuth } from "../AuthContext";
 
+// Shape of a single policy as returned by the Flask /api/policies endpoint.
 interface Policy {
   id: string;
   title: string;
   summary: string;
   category: string;
   department: string;
-  date: string;
-  status: string;
-  priority: string;
-  content: string;
+  date: string;           // ISO date string, e.g. "2024-12-16"
+  status: string;         // "Active" | "Proposed" | "Under Review" | etc.
+  priority: string;       // "High" | "Medium"
+  content: string;        // extended text: summary + eligibility + funding
   tags: string[];
   apply_url?: string | null;
   effective_date?: string | null;
   closing_date?: string | null;
-  source_url?: string | null;
+  source_url?: string | null;    // link to the city council agenda page
   funding_amount?: string | null;
-  funding_pct_diff?: string | null;
+  funding_pct_diff?: string | null; // e.g. "+46% above average"
   benefit_type?: string;
-  targeted_labels?: string[];
+  targeted_labels?: string[];    // populated when profile filters are active
 }
 
+// Shape of the filter panel state.
 interface Filters {
   benefitTypes: string[];
   veteranOnly: boolean;
   seniorOnly: boolean;
   disabilityPreferred: boolean;
   currentlyHomeless: boolean;
-  maxIncome: string;
-  householdSize: string;
+  maxIncome: string;     // numeric string or "" for no limit
+  householdSize: string; // numeric string or "" for no limit
 }
 
+// Baseline filters — also used when the user clicks "home" to reset.
 const DEFAULT_FILTERS: Filters = {
   benefitTypes: [],
   veteranOnly: false,
@@ -49,23 +65,32 @@ const DEFAULT_FILTERS: Filters = {
 };
 
 export default function App() {
-  const { user } = useAuth();
-  const [policies, setPolicies] = useState<Policy[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
-  const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [bannerPassed, setBannerPassed] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
-  const [subscribedIds, setSubscribedIds] = useState<Set<string>>(new Set());
-  const [toast, setToast] = useState<string | null>(null);
-  const [showSaved, setShowSaved] = useState(false);
-  const [sortBy, setSortBy] = useState("relevance");
-  const bannerRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth(); // currently signed-in Firebase user (or null)
 
-  // Load saved policies when user logs in
+  // ── Core data state ──────────────────────────────────────────────────────
+  const [policies, setPolicies] = useState<Policy[]>([]);   // deduplicated programs from API
+  const [loading, setLoading] = useState(true);              // show spinner while fetching
+  const [searchQuery, setSearchQuery] = useState("");        // text box value
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null); // modal target
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // ── UI state ─────────────────────────────────────────────────────────────
+  const [bannerPassed, setBannerPassed] = useState(false);  // true once the hero banner is scrolled past
+  const [filtersOpen, setFiltersOpen] = useState(false);    // filter dropdown visibility
+  const [showSaved, setShowSaved] = useState(false);         // "Saved" view toggle in header
+  const [sortBy, setSortBy] = useState("relevance");         // current sort selection
+  const [toast, setToast] = useState<string | null>(null);  // ephemeral confirmation message
+
+  // ── Per-user data ─────────────────────────────────────────────────────────
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());       // bookmark IDs
+  const [subscribedIds, setSubscribedIds] = useState<Set<string>>(new Set()); // alert IDs
+
+  const bannerRef = useRef<HTMLDivElement>(null); // ref to the hero image div for scroll detection
+
+  // ── Load per-user data on sign-in ──────────────────────────────────────────
+  // Fetch the list of policy IDs this user has saved.
+  // Cleared immediately on sign-out so stale data isn't shown between sessions.
   useEffect(() => {
     if (!user) { setSavedIds(new Set()); return; }
     user.getIdToken().then((token) =>
@@ -76,7 +101,7 @@ export default function App() {
     );
   }, [user]);
 
-  // Load subscriptions when user logs in
+  // Fetch the list of policy IDs this user has subscribed to for email alerts.
   useEffect(() => {
     if (!user) { setSubscribedIds(new Set()); return; }
     user.getIdToken().then((token) =>
@@ -147,7 +172,9 @@ export default function App() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Fetch from backend whenever filters change
+  // ── Backend fetch ──────────────────────────────────────────────────────────
+  // Re-fetch whenever the user changes any filter.  Text search and sorting are
+  // done client-side (see filteredPolicies below) so they don't trigger a fetch.
   useEffect(() => {
     const params = new URLSearchParams();
     filters.benefitTypes.forEach((t) => params.append("benefit_type", t));
@@ -162,6 +189,15 @@ export default function App() {
     fetch(`/api/policies?${params}`)
       .then((r) => r.json())
       .then((data: Policy[]) => {
+        // ── Client-side dedup ──────────────────────────────────────────────
+        // The backend already deduplicates, but this second pass catches any
+        // near-duplicates that slipped through (e.g. slightly different names
+        // scraped from separate meeting years).
+        //
+        // Algorithm: for each policy, extract "significant words" (strip stop-
+        // words and punctuation), then check if ≥85 % of the shorter title's
+        // words appear in any already-accepted title.  If so, it's a duplicate
+        // and we keep only the most-recently-dated one (sort descending first).
         const STOPWORDS = new Set(["of","the","a","an","for","and","or","to","in","at","by","from","with","is","its","are","on","as","be"]);
         const sigWords = (t: string) => new Set(
           t.toLowerCase().replace(/[^\w\s]/g, " ").split(/\s+/).filter(w => w.length > 2 && !STOPWORDS.has(w))
@@ -169,9 +205,11 @@ export default function App() {
         const isDup = (a: Set<string>, b: Set<string>) => {
           if (!a.size || !b.size) return false;
           const [short, long] = a.size <= b.size ? [a, b] : [b, a];
+          // Very short names (< 3 sig words) require exact match to avoid false positives.
           if (short.size < 3) return a.size === b.size && [...a].every(w => b.has(w));
           return [...short].filter(w => long.has(w)).length / short.size >= 0.85;
         };
+        // Sort most-recent first so the representative we keep is always the newest.
         const sorted = [...data].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
         const groups: Policy[] = [];
         const groupSets: Set<string>[] = [];
@@ -185,7 +223,9 @@ export default function App() {
       .catch(() => setLoading(false));
   }, [filters]);
 
-  // Client-side text search + sort
+  // ── Client-side text search + sort ────────────────────────────────────────
+  // Runs entirely in the browser — no additional API calls needed.
+  // Searches title, summary, and tags.  Sort order is applied after filtering.
   const filteredPolicies = useMemo(() => {
     let result = policies;
     if (searchQuery) {

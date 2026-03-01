@@ -1,7 +1,19 @@
+// UserMenu.tsx
+// Header component that handles all authentication UI.
+//
+// Logged-OUT state: shows a "Sign In" button that opens a modal with:
+//   - Email + password form (sign-in or create-account mode, togglable)
+//   - "Continue with Google" button as an alternative
+//   - Firebase error codes translated into user-friendly messages
+//
+// Logged-IN state: shows the user's avatar / name and a dropdown with
+//   a Sign Out option.
+
 import { useState, useRef, useEffect } from "react";
 import { LogIn, LogOut, ChevronDown, X } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 
+/** Inline Google "G" logo SVG — avoids an external image dependency. */
 function GoogleIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
@@ -15,15 +27,20 @@ function GoogleIcon() {
 
 export function UserMenu() {
   const { user, signIn, signInEmail, signUpEmail, signOut } = useAuth();
+
+  // ── Dropdown state (shown when user is logged in) ─────────────────────────
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null); // used for click-outside detection
+
+  // ── Modal state (shown when user is logged out) ───────────────────────────
   const [modalOpen, setModalOpen] = useState(false);
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup">("signin"); // toggles the form heading + submit action
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState<string | null>(null);    // human-readable error message
+  const [submitting, setSubmitting] = useState(false);         // disables the submit button during network call
 
+  // Close the dropdown when the user clicks anywhere outside of it.
   useEffect(() => {
     const handle = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -32,15 +49,21 @@ export function UserMenu() {
     return () => document.removeEventListener("mousedown", handle);
   }, []);
 
-  // Close modal on successful sign-in
+  // When Firebase reports a successful sign-in, clear the modal and reset form fields.
   useEffect(() => {
     if (user) { setModalOpen(false); setEmail(""); setPassword(""); setError(null); }
   }, [user]);
 
+  /** Open the modal and reset it to a clean state for the given mode. */
   const openModal = (m: "signin" | "signup") => {
     setMode(m); setError(null); setEmail(""); setPassword(""); setModalOpen(true);
   };
 
+  /**
+   * Handle the email/password form submission.
+   * Calls the appropriate Firebase method and converts Firebase error codes
+   * (e.g. "auth/wrong-password") into readable sentences for the UI.
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -52,6 +75,7 @@ export function UserMenu() {
         await signUpEmail(email, password);
       }
     } catch (err: unknown) {
+      // Map Firebase error codes to friendly messages.
       const code = (err as { code?: string })?.code ?? "";
       if (code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-credential") {
         setError("Invalid email or password.");
@@ -62,6 +86,7 @@ export function UserMenu() {
       } else if (code === "auth/invalid-email") {
         setError("Please enter a valid email address.");
       } else {
+        // Fallback: show the raw Firebase message.
         setError((err as { message?: string })?.message ?? "Authentication failed.");
       }
     } finally {
@@ -69,9 +94,11 @@ export function UserMenu() {
     }
   };
 
+  // ── Logged-out view ───────────────────────────────────────────────────────
   if (!user) {
     return (
       <>
+        {/* "Sign In" button in the header — opens the modal */}
         <button
           onClick={() => openModal("signin")}
           className="flex items-center gap-2 px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
@@ -80,15 +107,17 @@ export function UserMenu() {
           Sign In
         </button>
 
+        {/* Full-screen backdrop + centered modal card */}
         {modalOpen && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-            onClick={() => setModalOpen(false)}
+            onClick={() => setModalOpen(false)} // click outside the card to close
           >
             <div
               className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()} // prevent backdrop click from closing when clicking inside
             >
+              {/* Modal header */}
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-bold text-gray-900">
                   {mode === "signin" ? "Sign In" : "Create Account"}
@@ -101,6 +130,7 @@ export function UserMenu() {
                 </button>
               </div>
 
+              {/* Email + password form */}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
@@ -122,12 +152,14 @@ export function UserMenu() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     minLength={6}
+                    // Tell password managers whether to autofill existing or generate a new password.
                     autoComplete={mode === "signup" ? "new-password" : "current-password"}
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
                     placeholder="••••••••"
                   />
                 </div>
 
+                {/* Error banner — only rendered when there's a message */}
                 {error && (
                   <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
                 )}
@@ -141,12 +173,14 @@ export function UserMenu() {
                 </button>
               </form>
 
+              {/* Divider between email form and Google button */}
               <div className="mt-4 flex items-center gap-3">
                 <div className="flex-1 h-px bg-gray-200" />
                 <span className="text-xs text-gray-400">or</span>
                 <div className="flex-1 h-px bg-gray-200" />
               </div>
 
+              {/* Google OAuth button — triggers a popup via Firebase */}
               <button
                 onClick={signIn}
                 className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
@@ -155,6 +189,7 @@ export function UserMenu() {
                 Continue with Google
               </button>
 
+              {/* Toggle between sign-in and sign-up modes */}
               <p className="mt-4 text-center text-sm text-gray-500">
                 {mode === "signin" ? (
                   <>
@@ -185,12 +220,16 @@ export function UserMenu() {
     );
   }
 
+  // ── Logged-in view ────────────────────────────────────────────────────────
+  // Shows a pill button with the user's avatar and name.
+  // Clicking it toggles a small dropdown containing the sign-out action.
   return (
     <div ref={ref} className="relative shrink-0">
       <button
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 hover:bg-gray-50 transition-colors"
       >
+        {/* Google users have a photoURL; email users get an initial avatar */}
         {user.photoURL ? (
           <img src={user.photoURL} alt="" className="w-7 h-7 rounded-full" />
         ) : (
@@ -204,8 +243,10 @@ export function UserMenu() {
         <ChevronDown className="w-4 h-4 text-gray-400" />
       </button>
 
+      {/* Dropdown menu */}
       {open && (
         <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+          {/* Email display — read-only, helps user confirm which account is active */}
           <div className="px-4 py-3 border-b border-gray-100">
             <p className="text-xs text-gray-400 truncate">{user.email}</p>
           </div>
