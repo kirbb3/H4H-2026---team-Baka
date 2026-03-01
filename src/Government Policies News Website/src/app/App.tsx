@@ -35,7 +35,8 @@ interface Policy {
   apply_url?: string | null;
   effective_date?: string | null;
   closing_date?: string | null;
-  source_url?: string | null;    // link to the city council agenda page
+  memo_url?: string | null;      // direct staff-memorandum PDF (most specific gov doc)
+  source_url?: string | null;    // broader meeting agenda page (fallback)
   funding_amount?: string | null;
   funding_pct_diff?: string | null; // e.g. "+46% above average"
   benefit_type?: string;

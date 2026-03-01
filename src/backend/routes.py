@@ -355,6 +355,9 @@ def transform(p, profile_flags: dict | None = None, avg_funding: float | None = 
         "apply_url":        p.get("apply_url"),
         "effective_date":   p.get("effective_date"),
         "closing_date":     p.get("closing_date"),
+        # memo_url — direct link to the government staff memorandum for this item
+        # (the most policy-specific link); source_url is the broader agenda page.
+        "memo_url":         p.get("memo_url"),
         "source_url":       p.get("source_url"),   # agenda / meeting page URL
         "funding_amount":   p.get("funding_amount"),
         "funding_pct_diff": funding_pct_diff,

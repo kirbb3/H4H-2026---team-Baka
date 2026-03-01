@@ -41,7 +41,8 @@ interface Policy {
   apply_url?: string | null;
   effective_date?: string | null;
   closing_date?: string | null;
-  source_url?: string | null;
+  memo_url?: string | null;    // direct staff-memorandum PDF (most specific gov doc)
+  source_url?: string | null;  // broader meeting agenda page (fallback)
   funding_amount?: string | null;
   funding_pct_diff?: string | null;
 }
@@ -256,12 +257,13 @@ export function PolicyDetailModal({
 
           {/* ── Action buttons ──────────────────────────────────────────────── */}
           <div className="flex gap-3">
-            {/* "Find Out More" — links to the official Legistar agenda page (source_url),
-                which is always a real government document.  Hidden if no URL is stored. */}
-            {policy.source_url && (
+            {/* "Find Out More" — links to the government document for this policy.
+                Prefers memo_url (the specific staff memorandum PDF) over source_url
+                (the broader agenda page).  Hidden when neither is available. */}
+            {(policy.memo_url || policy.source_url) && (
               <Button
                 className="flex-1 bg-blue-600 hover:bg-blue-700"
-                onClick={() => window.open(policy.source_url!, "_blank")}
+                onClick={() => window.open((policy.memo_url || policy.source_url)!, "_blank")}
               >
                 Find Out More
               </Button>
