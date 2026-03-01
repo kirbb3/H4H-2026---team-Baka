@@ -65,6 +65,7 @@ CSV_COLUMNS = [
     "apply_url",
     "source_pdf",
     "agenda_url",   # stable city council agenda URL for this meeting
+    "memo_url",     # direct link to the staff memorandum PDF for this item
 ]
 
 
@@ -501,6 +502,10 @@ def _opp_to_mongo_doc(opp: dict) -> dict:
         "effective_date":          opp.get("effective_date"),
         "closing_date":            opp.get("closing_date"),
         "apply_url":               opp.get("apply_url"),
+        # memo_url is the direct link to the staff memorandum PDF — the most
+        # specific government document about this particular policy item.
+        # source_url is the broader meeting agenda page, used as a fallback.
+        "memo_url":                opp.get("memo_url"),
         "source_url":              opp.get("agenda_url") or opp.get("source_pdf"),
         "date_created":            opp.get("date_created"),
         "eligibility": {
@@ -629,6 +634,9 @@ def run():
                 memo_url = find_memo_url_via_agenda(agenda_url, section)
 
                 if memo_url:
+                    # Save the memo URL so the frontend can link directly to the
+                    # government staff report rather than the generic agenda page.
+                    opp["memo_url"] = memo_url
                     print(f"    Analyzing memorandum ANALYSIS section: {memo_url}")
                     result = analyze_memorandum_analysis_section(memo_url, memo_client)
 
