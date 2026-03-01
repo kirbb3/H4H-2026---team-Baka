@@ -182,7 +182,7 @@ def search_programs(
     if text_query:
         query["$text"] = {"$search": text_query}
 
-    return list(get_programs_collection().find(query, {"_id": 0}))
+    return list(get_programs_collection().find(query))
 
 
 def delete_program(slug: str) -> bool:

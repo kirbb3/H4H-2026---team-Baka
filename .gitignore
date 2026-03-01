@@ -1,5 +1,9 @@
 # Environment variables — never commit real credentials
 .env
+.env.local
+
+# Firebase service account — contains private key, never commit
+firebase-service-account.json
 
 # Python
 __pycache__/
