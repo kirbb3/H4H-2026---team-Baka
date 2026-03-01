@@ -1,0 +1,22 @@
+# Environment variables — never commit real credentials
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Scraper state — regenerated on each run
+seen_pdfs.json
+housing_opportunities.csv
+
+# Node
+node_modules/
+
+# Claude internal
+.claude/
+
+# Data outputs
+src/data/processed/
