@@ -1,4 +1,3 @@
-
 """
 San Jose City Council Minutes Scraper
 --------------------------------------
@@ -50,7 +49,6 @@ OUTPUT_CSV     = "housing_opportunities.csv"
 SEEN_PDFS_FILE = "seen_pdfs.json"   # tracks already-processed PDFs across runs
 MODEL          = "claude-haiku-4-5-20251001"  # lightweight model — fast & cheap
 YEAR           = "2025"  # str(datetime.now().year)
-
 
 CSV_COLUMNS = [
     "opportunity",
@@ -642,11 +640,11 @@ def run():
 
                     if result.get("effective_date") and not opp.get("effective_date"):
                         opp["effective_date"] = result["effective_date"]
-                        print(f"      → effective_date: {result['effective_date']}")
+                        print(f"      -> effective_date: {result['effective_date']}")
 
                     if result.get("apply_url") and not opp.get("apply_url"):
                         opp["apply_url"] = result["apply_url"]
-                        print(f"      → apply_url: {result['apply_url']}")
+                        print(f"      -> apply_url: {result['apply_url']}")
         # ──────────────────────────────────────────────────────────────────────
 
         if opportunities:
@@ -668,7 +666,7 @@ def run():
 
     save_seen_pdfs(seen)
 
-    print(f"\n✓ Done. Results in: {OUTPUT_CSV}")
+    print(f"\n Done. Results in: {OUTPUT_CSV}")
     print(f"  Total new opportunities found: {len(all_opportunities)}\n")
 
 
