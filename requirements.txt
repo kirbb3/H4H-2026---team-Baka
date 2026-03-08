@@ -1,15 +1,9 @@
-# Web framework
 flask>=3.0
-
-# MongoDB driver
 pymongo[srv]>=4.6
-
-# Environment variables
+firebase-admin>=6.0
 python-dotenv>=1.0
-
-# AI chatbot
-anthropic>=0.25
-
-# HTTP requests (scraper)
-requests>=2.31
 beautifulsoup4>=4.12
+requests>=2.31
+anthropic>=0.25
+playwright>=1.40
+pdfplumber>=0.10

@@ -1,7 +1,11 @@
-# Environment variables — NEVER commit these
+# Environment variables — never commit real credentials
 .env
 *.env
 .env.*
+.env.local
+
+# Firebase service account — contains private key, never commit
+firebase-service-account.json
 
 # Python
 __pycache__/
@@ -29,3 +33,16 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Scraper state — regenerated on each run
+seen_pdfs.json
+housing_opportunities.csv
+
+# Node
+node_modules/
+
+# Claude internal
+.claude/
+
+# Data outputs
+src/data/processed/
