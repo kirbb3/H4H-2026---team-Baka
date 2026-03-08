@@ -1,0 +1,15 @@
+# Web framework
+flask>=3.0
+
+# MongoDB driver
+pymongo[srv]>=4.6
+
+# Environment variables
+python-dotenv>=1.0
+
+# AI chatbot
+anthropic>=0.25
+
+# HTTP requests (scraper)
+requests>=2.31
+beautifulsoup4>=4.12
